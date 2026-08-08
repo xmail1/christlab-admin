@@ -53,7 +53,7 @@ const F = {
     { name: "contractType", label: "Type de contrat", type: "text", placeholder: "ex. EXCLUSIF, LICENCE, DISTRIBUTION" },
     { name: "royaltyRate", label: "Taux de royalties", type: "text", placeholder: "ex. 0.70 (laisser vide = taux de la plateforme)" },
     { name: "contractStartDate", label: "Début du contrat", type: "date" },
-    { name: "payoutInfo", label: "Coordonnées de paiement", type: "textarea", placeholder: "Mobile money / IBAN / …" },
+    { name: "payoutInfo", label: "Coordonnées de paiement", type: "textarea" },
   ],
   pepiteCreate: [
     { name: "type", label: "Type", type: "text", required: true, placeholder: "ex. ARTIST, EVENT, TRACK" },
