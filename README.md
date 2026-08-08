@@ -14,9 +14,28 @@ Connexion admin, puis menu : **Tableau de bord, Utilisateurs** (suspendre/réact
 Règles métier, Journal d'audit**. Le rendu est générique (tableaux / cartes de stats) et
 s'adapte aux données renvoyées par l'API.
 
-> Version 1 = **consultation** de tous les modules + action *suspendre un utilisateur*.
-> Les actions d'écriture par module (créer/éditer pistes, gérer pubs, valider paiements…)
-> viendront ensuite, module par module.
+Actions d'écriture disponibles à ce jour : **Pistes** (créer / éditer / supprimer),
+**Artistes** (créer / éditer + voir les chants), **Pépites** (créer / éditer / supprimer),
+**Administrateurs** (créer / éditer), **Utilisateurs** (éditer / suspendre),
+**Règles métier** (éditer). Restent à faire : **Publicités**, **Paiements**.
+
+Chaque tableau dispose d'un champ **Filtrer…** (recherche instantanée côté navigateur).
+
+### Notes sur le catalogue (Pistes / Artistes)
+
+- La **liste** des pistes vient de la route publique `GET /api/tracks?lang=fr` : le backend
+  n'expose pas de `GET /api/admin/tracks` (seulement `POST` / `PUT` / `DELETE`).
+  Le paramètre **`lang=fr` est obligatoire** — sans lui le backend traduit `genre` et
+  `heartStates` selon la langue du navigateur, et une simple édition réécrirait en base des
+  valeurs traduites au lieu des valeurs canoniques (françaises).
+- L'**artiste d'une piste se choisit dans une liste déroulante** alimentée par `/api/admin/artists`.
+  Le formulaire envoie `artistId` **et** `artist` (façade texte du contrat ALN-002) pour qu'ils
+  restent cohérents. Un artiste doit donc exister avant qu'on lui rattache une piste.
+- L'édition d'une piste est un **remplacement complet** (`PUT` = `TrackCreateRequest`) : tous
+  les champs sont renvoyés, y compris vides. Les listes fermées (genre, type, langue, continent,
+  états du cœur) sont des menus alignés sur l'app Android.
+- Le backend **ne propose pas de suppression d'artiste** : on le passe en statut `SUSPENDED`
+  ou `ARCHIVED` via l'édition.
 
 ---
 
@@ -63,7 +82,8 @@ Il faut se connecter avec un compte ayant un **rôle admin** (`SUPER_ADMIN` ou
 
 ## 5. Prochaines étapes
 
-- Actions d'écriture par module (formulaires création/édition).
-- Filtres / recherche / pagination sur les grandes listes.
+- Actions d'écriture restantes : **Publicités**, **Paiements**.
+- Pagination / filtres serveur sur les grandes listes (le filtre actuel est côté navigateur).
+- Téléversement des fichiers audio et pochettes (aujourd'hui : on saisit une URL).
 - Gestion fine des rôles & permissions (SUPER_ADMIN vs DELEGATED_ADMIN).
 - Éventuel : servir le dashboard depuis le backend (même origine, zéro CORS).

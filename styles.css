@@ -61,7 +61,11 @@ a{color:var(--gold-dark)}
 /* TABLES */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow);overflow:hidden}
-.card h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:14px}
+.card h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:14px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px}
+.table-filter{padding:7px 11px;border:1px solid var(--line);border-radius:9px;font:inherit;
+  font-weight:400;width:min(240px,45vw);background:#fff}
+.table-filter:focus{outline:2px solid var(--gold);border-color:var(--gold)}
 .table-scroll{overflow:auto;max-height:65vh}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:10px 14px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
@@ -88,12 +92,18 @@ tr:hover td{background:#FBFAF6}
   width:min(520px,96vw);max-height:90vh;overflow:auto;padding:22px}
 .modal h3{margin:0 0 14px;font-size:16px}
 .modal-form{display:flex;flex-direction:column;gap:12px}
+.modal.wide{width:min(900px,96vw)}
 .modal-form textarea,.modal-form select,.modal-form input[type=text],.modal-form input[type=email],
-.modal-form input[type=password],.modal-form input[type=number],.modal-form input[type=date]{
+.modal-form input[type=password],.modal-form input[type=number],.modal-form input[type=date],
+.modal-form input[type=url],.modal-form input[type=search]{
   padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;width:100%}
 .modal-form label{display:flex;flex-direction:column;gap:6px;font-weight:600;color:#374151;font-size:13px}
 .modal-form label.chk{flex-direction:row;align-items:center;gap:8px}
 .modal-form label.chk input{width:auto}
+.field-label{font-weight:600;color:#374151;font-size:13px;margin-bottom:6px}
+.multi{display:flex;flex-wrap:wrap;gap:6px 16px;border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;background:#fff}
+.multi label.chk{font-weight:500;margin:0}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
 
 @media(max-width:760px){
