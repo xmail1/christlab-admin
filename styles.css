@@ -77,6 +77,25 @@ tr:hover td{background:#FBFAF6}
 .loading{padding:40px;text-align:center;color:var(--muted)}
 .err-inline{background:#FEE2E2;color:#991B1B;padding:14px 16px;border-radius:10px}
 
+/* TOOLBAR + BOUTONS */
+.toolbar{display:flex;justify-content:flex-end;margin-bottom:4px}
+.btn.small{padding:9px 14px;font-size:13px;border-radius:10px}
+.actions-cell{display:flex;gap:6px}
+
+/* MODALE */
+.modal-back{position:fixed;inset:0;background:rgba(17,20,26,.5);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:var(--panel);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);
+  width:min(520px,96vw);max-height:90vh;overflow:auto;padding:22px}
+.modal h3{margin:0 0 14px;font-size:16px}
+.modal-form{display:flex;flex-direction:column;gap:12px}
+.modal-form textarea,.modal-form select,.modal-form input[type=text],.modal-form input[type=email],
+.modal-form input[type=password],.modal-form input[type=number],.modal-form input[type=date]{
+  padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;width:100%}
+.modal-form label{display:flex;flex-direction:column;gap:6px;font-weight:600;color:#374151;font-size:13px}
+.modal-form label.chk{flex-direction:row;align-items:center;gap:8px}
+.modal-form label.chk input{width:auto}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+
 @media(max-width:760px){
   #app{grid-template-columns:1fr}
   .sidebar{position:sticky;top:0;flex-direction:row;flex-wrap:wrap;align-items:center}
