@@ -126,15 +126,21 @@ const VIEWS = [
 
 /* ---------------- API ---------------- */
 async function api(path, opts = {}) {
+  // isLogin : sur l'écran de connexion, un 401 veut dire « identifiants refusés »,
+  // surtout pas « session expirée » (message trompeur qui masque la vraie cause).
+  const { isLogin, ...fetchOpts } = opts;
   const res = await fetch(BASE + path, {
-    ...opts,
+    ...fetchOpts,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: "Bearer " + token } : {}),
       ...(opts.headers || {}),
     },
   });
-  if (res.status === 401) { doLogout(); throw new Error("Session expirée — reconnectez-vous."); }
+  if (res.status === 401) {
+    if (isLogin) throw new Error("E-mail ou mot de passe incorrect — ou compte suspendu.");
+    doLogout(); throw new Error("Session expirée — reconnectez-vous.");
+  }
   if (res.status === 403) throw new Error("Accès refusé : ce compte n'a pas les droits administrateur.");
   const text = await res.text();
   let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -144,7 +150,7 @@ async function api(path, opts = {}) {
 
 /* ---------------- Auth ---------------- */
 async function doLogin(email, password) {
-  const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  const data = await api("/api/auth/login", { method: "POST", isLogin: true, body: JSON.stringify({ email, password }) });
   if (!data || !data.token) throw new Error("Réponse inattendue du serveur.");
   token = data.token;
   localStorage.setItem(TOKEN_KEY, token);
