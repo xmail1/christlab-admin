@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChristLab Team — Console d'administration</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ÉCRAN DE CONNEXION -->
+<div id="login" class="login-wrap">
+  <form id="login-form" class="login-card">
+    <div class="brand"><span class="b-christ">Christ</span><span class="b-lab">Lab</span> <span class="b-team">Team</span></div>
+    <p class="login-sub">Console d'administration</p>
+    <label>E-mail administrateur
+      <input id="email" type="email" autocomplete="username" required placeholder="admin@christlab.com">
+    </label>
+    <label>Mot de passe
+      <input id="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+    </label>
+    <button type="submit" id="login-btn">Se connecter</button>
+    <div id="login-error" class="error" hidden></div>
+  </form>
+</div>
+
+<!-- APPLICATION -->
+<div id="app" hidden>
+  <aside class="sidebar">
+    <div class="brand small"><span class="b-christ">Christ</span><span class="b-lab">Lab</span> <span class="b-team">Team</span></div>
+    <nav id="nav"></nav>
+    <div class="sidebar-foot">
+      <span id="who"></span>
+      <button id="logout" class="link">Déconnexion</button>
+    </div>
+  </aside>
+  <main class="content">
+    <header class="topbar">
+      <h1 id="view-title">Tableau de bord</h1>
+      <button id="refresh" class="ghost">↻ Rafraîchir</button>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
