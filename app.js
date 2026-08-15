@@ -70,12 +70,14 @@ const F = {
     { name: "email", label: "E-mail", type: "email", required: true },
     { name: "name", label: "Nom", type: "text", required: true },
     { name: "adminRole", label: "Rôle", type: "select", options: ["DELEGATED_ADMIN", "SUPER_ADMIN"] },
-    { name: "permissions", label: "Permissions (séparées par virgules)", type: "text", list: true, placeholder: "users, tracks, ads" },
-    { name: "password", label: "Mot de passe (compte)", type: "password", required: true },
+    { name: "permissions", label: "Permissions (séparées par virgules)", type: "text", list: true, placeholder: "users, catalogue, finances, pub" },
+    // Le backend ignore ce mot de passe si un compte existe déjà avec cet e-mail :
+    // il se contente alors de passer le compte en rôle ADMIN.
+    { name: "password", label: "Mot de passe (ignoré si le compte existe déjà)", type: "password", required: true },
   ],
   adminEdit: [
     { name: "adminRole", label: "Rôle", type: "select", options: ["DELEGATED_ADMIN", "SUPER_ADMIN"] },
-    { name: "permissions", label: "Permissions (séparées par virgules)", type: "text", list: true },
+    { name: "permissions", label: "Permissions (séparées par virgules)", type: "text", list: true, placeholder: "users, catalogue, finances, pub" },
     { name: "status", label: "Statut", type: "select", options: ["ACTIVE", "SUSPENDED", "DELETED"] },
   ],
   userEdit: [
