@@ -117,9 +117,11 @@ F.invoice = [
   { name: "status", label: "Statut", type: "select", options: ["IMPAYEE", "PAYEE"] },
 ];
 // Génère les relevés de répartition d'une période (POST /api/admin/payouts/calculate).
+// Les bornes sont comparées à `listenedAt`, un horodatage ISO complet : une date nue
+// exclurait toutes les écoutes du dernier jour de la période.
 F.payoutCalc = [
-  { name: "periodStart", label: "Début de période", type: "date", required: true },
-  { name: "periodEnd", label: "Fin de période", type: "date", required: true },
+  { name: "periodStart", label: "Début de période", type: "date", iso: "start", required: true },
+  { name: "periodEnd", label: "Fin de période", type: "date", iso: "end", required: true },
   { name: "totalRevenueCollected", label: "Revenus encaissés sur la période (USD)", type: "text", required: true, placeholder: "ex. 1500.00" },
 ];
 
@@ -160,7 +162,7 @@ const VIEWS = [
   { id: "invoices",       title: "Factures pub",     ico: "🧾", ep: "/api/admin/ads/invoices", rowActions: invoiceActions,
       create: { fields: F.invoice, ep: "/api/admin/ads/invoices", method: "POST", label: "Nouvelle facture" } },
   { id: "payouts",        title: "Paiements",        ico: "💰", ep: "/api/admin/payouts", rowActions: payoutActions,
-      create: { fields: F.payoutCalc, ep: "/api/admin/payouts/calculate", method: "POST", label: "Calculer les versements", icon: "🧮" } },
+      create: { fields: F.payoutCalc, ep: "/api/admin/payouts/calculate", method: "POST", label: "Calculer les versements", icon: "🧮", guard: guardPayoutPeriod } },
   { id: "dividends",      title: "Dividendes",       ico: "📈", ep: "/api/admin/dividends" },
   { id: "settings",       title: "Réglages",         ico: "⚙️", ep: "/api/admin/settings" },
   { id: "business-rules", title: "Règles métier",    ico: "📐", ep: "/api/admin/business-rules", rowActions: businessRuleActions },
@@ -356,10 +358,27 @@ async function prepareFields(fields) {
   await Promise.all(sources.map(s => ensureRef(s)));
 }
 
+/* Le backend n'a AUCUN contrôle de doublon sur le calcul des versements : relancer la même
+   période crée des relevés en double, et aucun endpoint ne permet de les supprimer. */
+async function guardPayoutPeriod(values) {
+  const debut = String(values.periodStart || "").slice(0, 10);
+  const fin = String(values.periodEnd || "").slice(0, 10);
+  let existants = [];
+  try { existants = await api("/api/admin/payouts"); } catch { return true; }
+  const doublons = (existants || []).filter(p =>
+    String(p.periodStart || "").slice(0, 10) === debut && String(p.periodEnd || "").slice(0, 10) === fin);
+  if (!doublons.length) return true;
+  return confirm(
+    `ATTENTION — ${doublons.length} relevé(s) existent déjà pour la période du ${debut} au ${fin}.\n\n` +
+    `Relancer le calcul créera des relevés EN DOUBLE : les montants dus seront comptés deux fois, ` +
+    `et le serveur ne permet pas de les supprimer ensuite.\n\nContinuer quand même ?`);
+}
+
 async function runCreate(view) {
   await prepareFields(view.create.fields);
   const values = await openForm(view.create.label, view.create.fields, {}, { sendEmpty: view.create.sendEmpty });
   if (!values) return;
+  if (view.create.guard && !(await view.create.guard(values))) return;
   try {
     await api(view.create.ep, { method: view.create.method, body: JSON.stringify(values) });
     if (view.id === "artists") await ensureArtists(true);
