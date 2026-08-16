@@ -56,7 +56,10 @@ const F = {
     { name: "payoutInfo", label: "Coordonnées de paiement", type: "textarea" },
   ],
   pepiteCreate: [
-    { name: "type", label: "Type", type: "text", required: true, placeholder: "ex. ARTIST, EVENT, TRACK" },
+    // Les 7 types sont fermés côté backend (PepiteTypes.ALLOWED) : toute autre valeur est rejetée.
+    { name: "type", label: "Type", type: "select", required: true, placeholderOption: "— choisir —",
+      options: ["PEPITE_TRACK", "PEPITE_ARTIST", "UPCOMING_ALBUM", "UPCOMING_EVENT",
+                "UNOFFICIAL_TRACK", "EDITORIAL_SELECTION", "CHRISTLAB_NEWS"] },
     { name: "title", label: "Titre", type: "text", required: true },
     { name: "editorialText", label: "Texte éditorial", type: "textarea" },
     { name: "status", label: "Statut", type: "select", options: ["DRAFT", "PUBLISHED", "ARCHIVED"] },
@@ -80,9 +83,16 @@ const F = {
     { name: "permissions", label: "Permissions (séparées par virgules)", type: "text", list: true, placeholder: "users, catalogue, finances, pub" },
     { name: "status", label: "Statut", type: "select", options: ["ACTIVE", "SUSPENDED", "DELETED"] },
   ],
+  // UserUpdateRequest expose aussi l'abonnement : indispensable pour offrir ou prolonger un accès.
   userEdit: [
     { name: "name", label: "Nom", type: "text" },
+    { name: "premiumStatus", label: "Abonnement", type: "select", options: ["ACTIVE", "TRIAL", "EXPIRED"], placeholderOption: "— inchangé —" },
+    { name: "premiumEndDate", label: "Fin d'abonnement", type: "date" },
     { name: "isSuspended", label: "Suspendu", type: "checkbox" },
+  ],
+  dividendGrant: [
+    { name: "amount", label: "Montant (USD)", type: "text", required: true, placeholder: "ex. 25.00" },
+    { name: "reason", label: "Motif", type: "textarea", required: true, placeholder: "Pourquoi ce dividende est accordé" },
   ],
   businessRuleEdit: [
     { name: "key", label: "Clé", type: "text", required: true },
@@ -287,12 +297,11 @@ function openForm(title, fields, values = {}, opts = {}) {
       }
       else { lab.append(input); form.append(lab); }
     });
-    const errBox = el("div", "error"); errBox.hidden = true;
     const actions = el("div", "modal-actions");
     const cancel = el("button", "ghost", "Annuler"); cancel.type = "button";
     const submit = el("button", "btn", "Enregistrer"); submit.type = "submit";
     actions.append(cancel, submit);
-    form.append(errBox, actions);
+    form.append(actions);
     modal.append(form); back.append(modal); document.body.append(back);
     const close = (val) => { back.remove(); resolve(val); };
     cancel.onclick = () => close(null);
@@ -412,17 +421,31 @@ function fmt(v) {
 }
 function statusBadge(v) {
   const s = String(v).toUpperCase();
-  const map = { ACTIVE: "ok", PUBLISHED: "ok", PAID: "ok", SUPER_ADMIN: "info", DELEGATED_ADMIN: "info",
-    DRAFT: "warn", PENDING: "warn", ARCHIVED: "warn", SUSPENDED: "danger", DELETED: "danger", HIDDEN: "danger" };
+  const map = {
+    ACTIVE: "ok", PUBLISHED: "ok", PAID: "ok", PAYEE: "ok", TERMINEE: "ok", TRIAL: "ok",
+    SUPER_ADMIN: "info", DELEGATED_ADMIN: "info", PUBLIC: "info",
+    DRAFT: "warn", PENDING: "warn", ARCHIVED: "warn", PLANIFIEE: "warn", IMPAYEE: "warn",
+    EXPIRED: "warn", PREMIUM: "warn",
+    SUSPENDED: "danger", DELETED: "danger", HIDDEN: "danger", INACTIVE: "danger",
+  };
   return el("span", "badge " + (map[s] || "info"), v);
 }
+/* Libellés lisibles des indicateurs du tableau de bord (les clés brutes viennent de l'API). */
+const STAT_LABELS = {
+  totalUsers: "Utilisateurs", activePremiumUsers: "Abonnés actifs", trialUsers: "En période d'essai",
+  suspendedUsers: "Comptes suspendus", totalPlaybacks: "Écoutes totales", totalValidPlaybacks: "Écoutes valides",
+  currency: "Devise", estimatedMonthlyRevenue: "Revenu mensuel estimé",
+  adRevenuePaid: "Revenus pub encaissés", adRevenueUnpaid: "Revenus pub en attente",
+  totalAdRevenue: "Revenus pub totaux", adViews: "Impressions pub", adClicks: "Clics pub",
+  emergingRoyaltyRate: "Taux de royalties Pépites",
+};
 function renderStats(obj) {
   const wrap = el("div", "stats");
   const flat = {};
   for (const [k, v] of Object.entries(obj)) {
     if (v != null && typeof v === "object" && !Array.isArray(v))
-      for (const [k2, v2] of Object.entries(v)) flat[`${k} · ${k2}`] = v2;
-    else if (!Array.isArray(v)) flat[k] = v;
+      for (const [k2, v2] of Object.entries(v)) flat[STAT_LABELS[k2] || `${k} · ${k2}`] = v2;
+    else if (!Array.isArray(v)) flat[STAT_LABELS[k] || k] = v;
   }
   for (const [k, v] of Object.entries(flat)) {
     const c = el("div", "stat"); c.append(el("div", "k", k), el("div", "v", fmt(v))); wrap.append(c);
@@ -475,12 +498,31 @@ function renderTable(rows, rowActions, columns) {
   card.append(head, scroll);
   return card;
 }
+const SECTION_LABELS = {
+  topTracks: "Top 5 des pistes", topArtists: "Top 5 des artistes", blocks: "Blocs",
+};
 function smartRender(data, view) {
   if (Array.isArray(data)) return renderTable(data, view.rowActions, view.columns);
   if (data && typeof data === "object") {
-    const arrKey = Object.keys(data).find(k => Array.isArray(data[k]));
-    if (arrKey && Object.keys(data).length <= 3 && data[arrKey].length)
-      return renderTable(data[arrKey], view.rowActions, view.columns);
+    const arrKeys = Object.keys(data).filter(k => Array.isArray(data[k]));
+    // Réponse enveloppant une seule liste : on rend la liste directement.
+    if (arrKeys.length === 1 && Object.keys(data).length === 1)
+      return renderTable(data[arrKeys[0]], view.rowActions, view.columns);
+    // Réponse mixte (tableau de bord : kpis + topTracks + topArtists) : on affiche TOUT.
+    // L'ancienne version ne gardait que la première liste et perdait silencieusement les KPI.
+    if (arrKeys.length) {
+      const wrap = el("div", "sections");
+      const scalaires = Object.fromEntries(Object.entries(data).filter(([k]) => !arrKeys.includes(k)));
+      if (Object.keys(scalaires).length) wrap.append(renderStats(scalaires));
+      arrKeys.forEach(k => {
+        if (!data[k].length) return;
+        const sec = el("div", "section");
+        sec.append(el("h2", "section-title", SECTION_LABELS[k] || k));
+        sec.append(renderTable(data[k], null));
+        wrap.append(sec);
+      });
+      return wrap.children.length ? wrap : el("div", "empty", "Aucune donnée.");
+    }
     return renderStats(data);
   }
   return el("div", "empty", "Aucune donnée.");
@@ -494,9 +536,12 @@ function userActions(row) {
   const suspended = String(row.status || "").toUpperCase() === "SUSPENDED" || row.isSuspended === true;
   return [
     iconBtn("Éditer", "", () => runEdit("Éditer l'utilisateur", F.userEdit,
-      { name: row.name, isSuspended: suspended }, `/api/admin/users/${id}`)),
+      { name: row.name, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
+      `/api/admin/users/${id}`)),
+    // Le backend inverse lui-même le statut : cette route ne lit aucun corps de requête.
     iconBtn(suspended ? "Réactiver" : "Suspendre", suspended ? "" : "danger", async () => {
-      try { await api(`/api/admin/users/${id}/suspend`, { method: "PUT", body: JSON.stringify({ status: suspended ? "ACTIVE" : "SUSPENDED" }) }); loadView(current); }
+      if (!confirm(`${suspended ? "Réactiver" : "Suspendre"} le compte de ${row.name} (${row.email}) ?`)) return;
+      try { await api(`/api/admin/users/${id}/suspend`, { method: "PUT" }); loadView(current); }
       catch (e) { alert(e.message); }
     }),
   ];
@@ -526,6 +571,10 @@ function artistActions(row) {
     iconBtn("Éditer", "", () => runEdit("Éditer l'artiste", F.artistEdit, row,
       `/api/admin/artists/${id}`, "PUT", { refreshArtists: true })),
     iconBtn("Chants", "", () => showArtistTracks(id, row.name)),
+    // Les artistes émergents sont EXCLUS du calcul automatique des versements :
+    // le dividende manuel est leur seul mode de rémunération.
+    iconBtn("Dividende", "", () => runEdit(`Accorder un dividende à ${row.name}`, F.dividendGrant, {},
+      `/api/admin/dividends/artist/${id}`, "POST")),
   ];
 }
 

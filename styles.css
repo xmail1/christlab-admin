@@ -81,6 +81,10 @@ tr:hover td{background:#FBFAF6}
 .loading{padding:40px;text-align:center;color:var(--muted)}
 .err-inline{background:#FEE2E2;color:#991B1B;padding:14px 16px;border-radius:10px}
 
+/* SECTIONS (tableau de bord : indicateurs + listes) */
+.sections{display:flex;flex-direction:column;gap:22px}
+.section-title{margin:0 0 10px;font-size:15px;color:var(--ink)}
+
 /* TOOLBAR + BOUTONS */
 .toolbar{display:flex;justify-content:flex-end;margin-bottom:4px}
 .btn.small{padding:9px 14px;font-size:13px;border-radius:10px}
