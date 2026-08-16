@@ -14,10 +14,11 @@ Connexion admin, puis menu : **Tableau de bord, Utilisateurs** (suspendre/réact
 Règles métier, Journal d'audit**. Le rendu est générique (tableaux / cartes de stats) et
 s'adapte aux données renvoyées par l'API.
 
-Actions d'écriture disponibles à ce jour : **Pistes** (créer / éditer / supprimer),
+Tous les modules disposent désormais d'actions d'écriture : **Pistes** (créer / éditer / supprimer),
 **Artistes** (créer / éditer + voir les chants), **Pépites** (créer / éditer / supprimer),
-**Administrateurs** (créer / éditer), **Utilisateurs** (éditer / suspendre),
-**Règles métier** (éditer). Restent à faire : **Publicités**, **Paiements**.
+**Annonceurs** (créer / éditer / désactiver), **Campagnes** (créer / éditer / activer / terminer),
+**Factures pub** (créer / marquer payée), **Paiements** (calculer les versements / marquer payé),
+**Administrateurs** (créer / éditer), **Utilisateurs** (éditer / suspendre), **Règles métier** (éditer).
 
 Chaque tableau dispose d'un champ **Filtrer…** (recherche instantanée côté navigateur).
 
@@ -36,6 +37,29 @@ Chaque tableau dispose d'un champ **Filtrer…** (recherche instantanée côté 
   états du cœur) sont des menus alignés sur l'app Android.
 - Le backend **ne propose pas de suppression d'artiste** : on le passe en statut `SUSPENDED`
   ou `ARCHIVED` via l'édition.
+
+### Notes sur la régie publicitaire
+
+- Il n'y a **pas** de `GET /api/admin/ads` : le backend expose trois ressources distinctes
+  (`/advertisers`, `/campaigns`, `/invoices`) plus `/stats`, repris dans le tableau de bord.
+  D'où trois entrées de menu séparées au lieu d'un module « Publicités » unique.
+- Une bannière n'est diffusée dans l'app que si la campagne est en statut **`ACTIVE`** *et*
+  que la date du jour tombe entre son début et sa fin. Les statuts `PLANIFIEE` / `TERMINEE`
+  ne diffusent rien.
+- Le backend compare ces bornes à un **instant ISO complet**. La console envoie donc
+  `T00:00:00Z` pour le début et `T23:59:59Z` pour la fin : sans cela, une campagne cesserait
+  d'être diffusée le matin de son dernier jour.
+- « Désactiver » un annonceur ne le supprime pas — le `DELETE` du backend bascule son statut
+  en `INACTIVE`.
+- Les montants (`tariff`, `amount`, taux de royalties) sont transmis en **chaîne de caractères**
+  (« 50.00 »), comme l'exige le sérialiseur `BigDecimal` du backend.
+
+### Notes sur les paiements aux artistes
+
+- **Calculer les versements** génère les relevés d'une période à partir des écoutes valides
+  et du revenu total encaissé que tu saisis. C'est une écriture réelle : les relevés sont créés
+  en base. À ne lancer qu'une fois par période.
+- « Marquer payé » bascule `isPaid` ; l'action est réversible depuis la même ligne.
 
 ---
 
@@ -82,8 +106,8 @@ Il faut se connecter avec un compte ayant un **rôle admin** (`SUPER_ADMIN` ou
 
 ## 5. Prochaines étapes
 
-- Actions d'écriture restantes : **Publicités**, **Paiements**.
 - Pagination / filtres serveur sur les grandes listes (le filtre actuel est côté navigateur).
+- Garde-fou : masquer *Suspendre* sur sa propre ligne (se suspendre soi-même bloque la console).
 - Téléversement des fichiers audio et pochettes (aujourd'hui : on saisit une URL).
 - Gestion fine des rôles & permissions (SUPER_ADMIN vs DELEGATED_ADMIN).
 - Éventuel : servir le dashboard depuis le backend (même origine, zéro CORS).

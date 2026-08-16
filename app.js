@@ -90,6 +90,39 @@ const F = {
     { name: "unit", label: "Unité (optionnel)", type: "text" },
   ],
 };
+// --- RÉGIE PUBLICITAIRE (annonceurs / campagnes / factures) ---
+F.advertiser = [
+  { name: "name", label: "Nom de l'annonceur", type: "text", required: true },
+  { name: "contactEmail", label: "E-mail de contact", type: "email", required: true },
+  { name: "contactPhone", label: "Téléphone", type: "text" },
+  { name: "billingInfo", label: "Informations de facturation", type: "textarea" },
+  { name: "status", label: "Statut", type: "select", options: ["ACTIVE", "INACTIVE"] },
+];
+F.campaign = [
+  { name: "advertiserId", label: "Annonceur", type: "picker", source: "advertisers", required: true },
+  { name: "placement", label: "Emplacement", type: "select", options: ["PAGE_GEMS"], required: true },
+  // Le backend compare ces dates à un instant ISO complet : on borne la journée (voir `iso` dans openForm).
+  { name: "startDate", label: "Début", type: "date", iso: "start", required: true },
+  { name: "endDate", label: "Fin", type: "date", iso: "end", required: true },
+  { name: "tariff", label: "Tarif (USD)", type: "text", required: true, placeholder: "ex. 50.00" },
+  { name: "contentUrl", label: "URL de la bannière", type: "url", placeholder: "https://…" },
+  { name: "targetUrl", label: "URL de destination (clic)", type: "url", placeholder: "https://…" },
+  // Seul le statut ACTIVE est diffusé dans l'app, et uniquement entre les dates de début et de fin.
+  { name: "status", label: "Statut", type: "select", options: ["PLANIFIEE", "ACTIVE", "TERMINEE"] },
+];
+F.invoice = [
+  { name: "advertiserId", label: "Annonceur", type: "picker", source: "advertisers", required: true },
+  { name: "campaignId", label: "Campagne", type: "picker", source: "campaigns", required: true },
+  { name: "amount", label: "Montant (USD)", type: "text", required: true, placeholder: "ex. 250.00" },
+  { name: "status", label: "Statut", type: "select", options: ["IMPAYEE", "PAYEE"] },
+];
+// Génère les relevés de répartition d'une période (POST /api/admin/payouts/calculate).
+F.payoutCalc = [
+  { name: "periodStart", label: "Début de période", type: "date", required: true },
+  { name: "periodEnd", label: "Fin de période", type: "date", required: true },
+  { name: "totalRevenueCollected", label: "Revenus encaissés sur la période (USD)", type: "text", required: true, placeholder: "ex. 1500.00" },
+];
+
 // UpdateArtistRequest = mêmes champs (tous optionnels) + le statut.
 F.artistEdit = [
   ...F.artistCreate,
@@ -118,8 +151,16 @@ const VIEWS = [
       create: { fields: F.artistCreate, ep: "/api/admin/artists", method: "POST", label: "Nouvel artiste" } },
   { id: "pepites",        title: "Pépites",          ico: "💎", ep: "/api/admin/pepites", rowActions: pepiteActions,
       create: { fields: F.pepiteCreate, ep: "/api/admin/pepites", method: "POST", label: "Nouvelle pépite" } },
-  { id: "ads",            title: "Publicités",       ico: "📣", ep: "/api/admin/ads" },
-  { id: "payouts",        title: "Paiements",        ico: "💰", ep: "/api/admin/payouts" },
+  // La régie publicitaire n'a pas de GET sur /api/admin/ads : le backend expose trois
+  // ressources distinctes (annonceurs, campagnes, factures) + /stats repris au tableau de bord.
+  { id: "advertisers",    title: "Annonceurs",       ico: "🏢", ep: "/api/admin/ads/advertisers", rowActions: advertiserActions,
+      create: { fields: F.advertiser, ep: "/api/admin/ads/advertisers", method: "POST", label: "Nouvel annonceur" } },
+  { id: "campaigns",      title: "Campagnes",        ico: "📣", ep: "/api/admin/ads/campaigns", rowActions: campaignActions,
+      create: { fields: F.campaign, ep: "/api/admin/ads/campaigns", method: "POST", label: "Nouvelle campagne" } },
+  { id: "invoices",       title: "Factures pub",     ico: "🧾", ep: "/api/admin/ads/invoices", rowActions: invoiceActions,
+      create: { fields: F.invoice, ep: "/api/admin/ads/invoices", method: "POST", label: "Nouvelle facture" } },
+  { id: "payouts",        title: "Paiements",        ico: "💰", ep: "/api/admin/payouts", rowActions: payoutActions,
+      create: { fields: F.payoutCalc, ep: "/api/admin/payouts/calculate", method: "POST", label: "Calculer les versements", icon: "🧮" } },
   { id: "dividends",      title: "Dividendes",       ico: "📈", ep: "/api/admin/dividends" },
   { id: "settings",       title: "Réglages",         ico: "⚙️", ep: "/api/admin/settings" },
   { id: "business-rules", title: "Règles métier",    ico: "📐", ep: "/api/admin/business-rules", rowActions: businessRuleActions },
@@ -160,7 +201,7 @@ async function doLogin(email, password) {
   showApp();
 }
 function doLogout() {
-  token = ""; ARTISTS = null; localStorage.removeItem(TOKEN_KEY);
+  token = ""; ARTISTS = null; Object.keys(REFS).forEach(k => delete REFS[k]); localStorage.removeItem(TOKEN_KEY);
   $("#app").hidden = true; $("#login").hidden = false;
 }
 
@@ -199,6 +240,20 @@ function openForm(title, fields, values = {}, opts = {}) {
           const op = el("option", null, a.name); op.value = String(a.id); op.dataset.name = a.name; input.append(op);
         });
       }
+      else if (f.type === "picker") {
+        input = el("select");
+        const none = el("option", null, "— choisir —"); none.value = ""; input.append(none);
+        const src = REF_SOURCES[f.source] || {};
+        const list = REFS[f.source] || [];
+        list.forEach(r => {
+          const op = el("option", null, src.label ? src.label(r) : String(r.id));
+          op.value = String(r.id); input.append(op);
+        });
+        // Référence pointant hors de la liste chargée : on la conserve plutôt que de la perdre.
+        if (v != null && v !== "" && !list.some(r => String(r.id) === String(v))) {
+          const op = el("option", null, "#" + v); op.value = String(v); input.append(op);
+        }
+      }
       else if (f.type === "multi") {
         input = el("div", "multi");
         const cur = String(v ?? "").split(",").map(s => s.trim()).filter(Boolean);
@@ -216,6 +271,8 @@ function openForm(title, fields, values = {}, opts = {}) {
       // pré-remplissage
       if (v != null && f.type !== "multi") {
         if (f.type === "checkbox") input.checked = !!v;
+        // Un champ date n'accepte que AAAA-MM-JJ : on tronque une valeur ISO complète.
+        else if (f.type === "date" && typeof v === "string") input.value = v.slice(0, 10);
         else if (f.list && Array.isArray(v)) input.value = v.join(", ");
         else input.value = v;
       }
@@ -254,7 +311,11 @@ function openForm(title, fields, values = {}, opts = {}) {
           else { out[name] = Number(input.value); out.artist = (opt && opt.dataset.name) || ""; }
           continue;
         }
+        if (spec.type === "picker") { out[name] = input.value ? Number(input.value) : null; continue; }
         let val = input.value.trim();
+        // Le backend compare les bornes de campagne à un instant ISO complet : une date nue
+        // exclurait la campagne le jour même de sa fin. On borne donc la journée.
+        if (spec.iso && val.length === 10) val += (spec.iso === "start" ? "T00:00:00Z" : "T23:59:59Z");
         // opts.sendEmpty : le DTO exige la présence des champs (remplacement complet) -> on envoie même vide.
         if (val === "" && !opts.sendEmpty) continue;
         if (spec.list) out[name] = val.split(",").map(s => s.trim()).filter(Boolean);
@@ -275,8 +336,24 @@ async function ensureArtists(force = false) {
   }
   return ARTISTS;
 }
+/* Listes de référence génériques pour les champs `picker` (annonceurs, campagnes…). */
+const REF_SOURCES = {
+  advertisers: { ep: "/api/admin/ads/advertisers", label: r => r.name },
+  campaigns: { ep: "/api/admin/ads/campaigns", label: r => `#${r.id} — ${r.placement} — ${r.advertiserName || ""}`.trim() },
+};
+const REFS = {};
+async function ensureRef(source, force = false) {
+  if (!REFS[source] || force) {
+    try { REFS[source] = await api(REF_SOURCES[source].ep); }
+    catch { REFS[source] = REFS[source] || []; }
+  }
+  return REFS[source];
+}
+
 async function prepareFields(fields) {
   if (fields.some(f => f.type === "artistPicker")) await ensureArtists();
+  const sources = [...new Set(fields.filter(f => f.type === "picker").map(f => f.source))];
+  await Promise.all(sources.map(s => ensureRef(s)));
 }
 
 async function runCreate(view) {
@@ -286,6 +363,7 @@ async function runCreate(view) {
   try {
     await api(view.create.ep, { method: view.create.method, body: JSON.stringify(values) });
     if (view.id === "artists") await ensureArtists(true);
+    if (REF_SOURCES[view.id]) await ensureRef(view.id, true);
     loadView(current);
   } catch (e) { alert(e.message); }
 }
@@ -296,6 +374,7 @@ async function runEdit(title, fields, initial, ep, method = "PUT", opts = {}) {
   try {
     await api(ep, { method, body: JSON.stringify(values) });
     if (opts.refreshArtists) await ensureArtists(true);
+    if (opts.refreshRef) await ensureRef(opts.refreshRef, true);
     loadView(current);
   } catch (e) { alert(e.message); }
 }
@@ -456,6 +535,62 @@ async function showArtistTracks(id, name) {
   }
 }
 
+/* --- RÉGIE PUBLICITAIRE --- */
+function advertiserActions(row) {
+  const id = row.id;
+  const inactive = String(row.status || "").toUpperCase() === "INACTIVE";
+  const btns = [
+    iconBtn("Éditer", "", () => runEdit("Éditer l'annonceur", F.advertiser, row,
+      `/api/admin/ads/advertisers/${id}`, "PUT", { refreshRef: "advertisers" })),
+  ];
+  // Le backend n'a pas de vraie suppression : DELETE bascule le statut en INACTIVE.
+  if (!inactive) {
+    btns.push(iconBtn("Désactiver", "danger", async () => {
+      if (!confirm(`Désactiver l'annonceur « ${row.name} » ? Ses campagnes ne seront plus diffusées.`)) return;
+      try { await api(`/api/admin/ads/advertisers/${id}`, { method: "DELETE" }); await ensureRef("advertisers", true); loadView(current); }
+      catch (e) { alert(e.message); }
+    }));
+  }
+  return btns;
+}
+function campaignActions(row) {
+  const id = row.id;
+  const status = String(row.status || "").toUpperCase();
+  const setStatus = (s, label) => iconBtn(label, "", async () => {
+    try { await api(`/api/admin/ads/campaigns/${id}/status`, { method: "PUT", body: JSON.stringify({ status: s }) }); loadView(current); }
+    catch (e) { alert(e.message); }
+  });
+  const btns = [
+    iconBtn("Éditer", "", () => runEdit("Éditer la campagne", F.campaign, row,
+      `/api/admin/ads/campaigns/${id}`, "PUT", { refreshRef: "campaigns" })),
+  ];
+  // Seule une campagne ACTIVE est diffusée, et uniquement entre ses dates de début et de fin.
+  if (status !== "ACTIVE") btns.push(setStatus("ACTIVE", "Activer"));
+  if (status !== "TERMINEE") btns.push(setStatus("TERMINEE", "Terminer"));
+  return btns;
+}
+function invoiceActions(row) {
+  const id = row.id;
+  if (String(row.status || "").toUpperCase() === "PAYEE") return [el("span", "muted", "Payée")];
+  return [iconBtn("Marquer payée", "", async () => {
+    if (!confirm(`Marquer la facture #${id} (${row.amount} USD) comme payée ?`)) return;
+    try { await api(`/api/admin/ads/invoices/${id}/pay`, { method: "PUT" }); loadView(current); }
+    catch (e) { alert(e.message); }
+  })];
+}
+
+/* --- VERSEMENTS AUX ARTISTES --- */
+function payoutActions(row) {
+  const id = row.id;
+  const paid = row.isPaid === true;
+  return [iconBtn(paid ? "Annuler le paiement" : "Marquer payé", paid ? "danger" : "", async () => {
+    const label = `${row.artistName} — ${row.amountDue} ${row.currency || "USD"}`;
+    if (!confirm(paid ? `Annuler le paiement de ${label} ?` : `Marquer ${label} comme payé ?`)) return;
+    try { await api(`/api/admin/payouts/${id}/pay`, { method: "PUT", body: JSON.stringify({ isPaid: !paid }) }); loadView(current); }
+    catch (e) { alert(e.message); }
+  })];
+}
+
 function businessRuleActions(row) {
   return [ iconBtn("Éditer", "", () => runEdit("Éditer la règle", F.businessRuleEdit,
     { key: row.key, value: row.value, unit: row.unit }, `/api/admin/business-rules`)) ];
@@ -480,7 +615,7 @@ async function loadView(id) {
   const host = $("#view"); host.innerHTML = "";
   if (view.create) {
     const bar = el("div", "toolbar");
-    const add = el("button", "btn small", "＋ " + view.create.label);
+    const add = el("button", "btn small", (view.create.icon || "＋") + " " + view.create.label);
     add.onclick = () => runCreate(view);
     bar.append(add); host.append(bar);
   }
