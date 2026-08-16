@@ -125,6 +125,7 @@ tr:hover td{background:#FBFAF6}
 .url-upload button{white-space:nowrap}
 .upload-info{display:block;margin-top:5px;font-size:12px;font-weight:400;color:var(--muted)}
 .upload-info.ok{color:#166534} .upload-info.ko{color:#991B1B}
+.drop-actif{outline:2px dashed var(--gold);outline-offset:4px;border-radius:10px}
 .multi{display:flex;flex-wrap:wrap;gap:6px 16px;border:1px solid var(--line);
   border-radius:10px;padding:10px 12px;background:#fff}
 .multi label.chk{font-weight:500;margin:0}

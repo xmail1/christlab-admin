@@ -36,9 +36,9 @@ const F = {
     { name: "continent", label: "Continent", type: "select", options: VOC.continent, required: true, placeholderOption: "— choisir —" },
     { name: "country", label: "Pays", type: "text", required: true },
     { name: "durationSec", label: "Durée (secondes)", type: "number", required: true },
-    { name: "audioUrl", label: "Fichier audio", type: "urlUpload", required: true, placeholder: "https://… ou téléversez",
+    { name: "audioUrl", label: "Fichier audio (bouton, glisser-déposer ou Ctrl+V)", type: "urlUpload", required: true, placeholder: "https://… ou téléversez",
       accept: "audio/*,.mp3,.m4a,.aac,.ogg,.opus,.wav" },
-    { name: "coverUrl", label: "Pochette", type: "urlUpload", placeholder: "https://… ou téléversez",
+    { name: "coverUrl", label: "Pochette (bouton, glisser-déposer ou Ctrl+V)", type: "urlUpload", placeholder: "https://… ou téléversez",
       accept: "image/*,.jpg,.jpeg,.png,.webp" },
     { name: "heartStates", label: "États du cœur", type: "multi", options: VOC.heartStates },
     { name: "isPepite", label: "Pépite", type: "checkbox" },
@@ -217,21 +217,33 @@ async function api(path, opts = {}) {
 
 /* Téléversement d'un média : requête multipart, donc SANS le Content-Type JSON
    qu'impose api(). Le navigateur pose lui-même la frontière multipart. */
-async function uploadFile(file) {
-  // On lit d'abord le fichier EN MÉMOIRE, avant de l'envoyer. Un fichier resté « en ligne
-  // seulement » (OneDrive), déplacé ou verrouillé entre-temps échoue sinon en pleine requête,
-  // et le navigateur ne rapporte qu'un « Failed to fetch » indéchiffrable.
-  let buffer;
+/* Lecture d'un fichier local, avec deux chemins successifs. Un navigateur ne peut pas
+   rapatrier un fichier absent du disque (OneDrive « en ligne seulement »), mais lire son
+   contenu TÔT déclenche généralement l'hydratation par Windows — et un second essai via
+   FileReader aboutit parfois là où arrayBuffer a échoué. */
+async function lireFichier(file) {
   try {
-    buffer = await file.arrayBuffer();
-  } catch (e) {
-    throw new Error(
-      "Impossible de lire ce fichier. S'il est stocké sur OneDrive, ouvrez-le une fois " +
-      "dans l'explorateur pour le rendre disponible hors connexion, ou copiez-le d'abord " +
-      "dans un dossier local, puis réessayez."
-    );
-  }
-  if (!buffer.byteLength) throw new Error("Ce fichier est vide.");
+    const b = await file.arrayBuffer();
+    if (b && b.byteLength) return b;
+  } catch (e) { /* on tente le chemin de secours */ }
+  return await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error(
+      "Impossible de lire ce fichier. S'il vient de OneDrive, faites un clic droit dessus " +
+      "puis « Toujours conserver sur cet appareil », ou copiez-le dans un dossier local. " +
+      "Vous pouvez aussi le glisser directement sur le champ, ou le copier puis faire Ctrl+V dedans."
+    ));
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+async function uploadFile(file) {
+  // On lit le fichier EN MÉMOIRE avant d'ouvrir la requête : sinon un fichier déplacé,
+  // verrouillé ou non rapatrié échoue en pleine requête, et le navigateur ne rapporte
+  // qu'un « Failed to fetch » indéchiffrable.
+  const buffer = await lireFichier(file);
+  if (!buffer || !buffer.byteLength) throw new Error("Ce fichier est vide.");
 
   const fd = new FormData();
   fd.append("file", new Blob([buffer], { type: file.type || "application/octet-stream" }), file.name);
@@ -293,24 +305,45 @@ function openForm(title, fields, values = {}, opts = {}) {
         if (f.accept) file.accept = f.accept;
         const btn = el("button", "ghost small", "Téléverser"); btn.type = "button";
         const info = el("span", "upload-info");
-        btn.onclick = () => file.click();
-        file.onchange = async () => {
-          const chosen = file.files && file.files[0];
+        // Trois façons d'apporter un fichier : le bouton, le glisser-déposer, et le
+        // collage. Le presse-papiers contourne entièrement le système de fichiers —
+        // c'est le recours quand un fichier reste illisible.
+        const envoyer = async (chosen) => {
           if (!chosen) return;
           btn.disabled = true; info.textContent = "Envoi…"; info.className = "upload-info";
           try {
             const res = await uploadFile(chosen);
             input.value = res.url;
-            info.textContent = `${chosen.name} — ${Math.round((res.sizeBytes || 0) / 1024)} Ko`;
+            info.textContent = `${chosen.name || "fichier"} — ${Math.round((res.sizeBytes || 0) / 1024)} Ko`;
             info.className = "upload-info ok";
           } catch (e) {
             info.textContent = messageReseau(e); info.className = "upload-info ko";
           } finally { btn.disabled = false; file.value = ""; }
         };
+        btn.onclick = () => file.click();
+        file.onchange = () => envoyer(file.files && file.files[0]);
+
         field = el("div", "url-upload");
         field.append(input, btn, file);
         const holder = el("div");
         holder.append(field, info);
+
+        // Glisser-déposer sur la zone du champ.
+        ["dragenter", "dragover"].forEach(ev => holder.addEventListener(ev, e => {
+          e.preventDefault(); holder.classList.add("drop-actif");
+        }));
+        ["dragleave", "drop"].forEach(ev => holder.addEventListener(ev, e => {
+          e.preventDefault(); holder.classList.remove("drop-actif");
+        }));
+        holder.addEventListener("drop", e => {
+          const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+          if (f) envoyer(f);
+        });
+        // Collage (Ctrl+V) d'une image ou d'un fichier directement dans le champ.
+        input.addEventListener("paste", e => {
+          const f = e.clipboardData && e.clipboardData.files && e.clipboardData.files[0];
+          if (f) { e.preventDefault(); envoyer(f); }
+        });
         field = holder;
       }
       else if (f.type === "textarea") { input = el("textarea"); input.rows = 3; }
