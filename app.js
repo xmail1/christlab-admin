@@ -218,8 +218,23 @@ async function api(path, opts = {}) {
 /* Téléversement d'un média : requête multipart, donc SANS le Content-Type JSON
    qu'impose api(). Le navigateur pose lui-même la frontière multipart. */
 async function uploadFile(file) {
+  // On lit d'abord le fichier EN MÉMOIRE, avant de l'envoyer. Un fichier resté « en ligne
+  // seulement » (OneDrive), déplacé ou verrouillé entre-temps échoue sinon en pleine requête,
+  // et le navigateur ne rapporte qu'un « Failed to fetch » indéchiffrable.
+  let buffer;
+  try {
+    buffer = await file.arrayBuffer();
+  } catch (e) {
+    throw new Error(
+      "Impossible de lire ce fichier. S'il est stocké sur OneDrive, ouvrez-le une fois " +
+      "dans l'explorateur pour le rendre disponible hors connexion, ou copiez-le d'abord " +
+      "dans un dossier local, puis réessayez."
+    );
+  }
+  if (!buffer.byteLength) throw new Error("Ce fichier est vide.");
+
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", new Blob([buffer], { type: file.type || "application/octet-stream" }), file.name);
   const res = await fetch(BASE + "/api/admin/uploads", {
     method: "POST",
     headers: token ? { Authorization: "Bearer " + token } : {},
@@ -230,6 +245,16 @@ async function uploadFile(file) {
   if (res.status === 401) { doLogout(); throw new Error("Session expirée — reconnectez-vous."); }
   if (!res.ok) throw new Error((data && data.error) || ("Échec du téléversement (" + res.status + ")"));
   return data;
+}
+/* Distingue une panne réseau d'un refus du serveur : sans cela, toute coupure
+   remonte le « Failed to fetch » brut du navigateur, qui n'aide personne. */
+function messageReseau(e) {
+  const m = String(e && e.message || e);
+  if (/failed to fetch|load failed|networkerror/i.test(m)) {
+    return "Impossible de joindre le serveur. Vérifiez votre connexion, puis réessayez " +
+           "(le serveur se remet parfois en veille et met quelques secondes à répondre).";
+  }
+  return m;
 }
 
 /* ---------------- Auth ---------------- */
@@ -279,7 +304,7 @@ function openForm(title, fields, values = {}, opts = {}) {
             info.textContent = `${chosen.name} — ${Math.round((res.sizeBytes || 0) / 1024)} Ko`;
             info.className = "upload-info ok";
           } catch (e) {
-            info.textContent = e.message; info.className = "upload-info ko";
+            info.textContent = messageReseau(e); info.className = "upload-info ko";
           } finally { btn.disabled = false; file.value = ""; }
         };
         field = el("div", "url-upload");

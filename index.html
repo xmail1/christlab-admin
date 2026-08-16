@@ -1,16 +1,16 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChristLab Team — Console d'administration</title>
-<!-- Le ?v= force le navigateur à recharger les fichiers après un déploiement.
-     À incrémenter à chaque mise en ligne, sinon l'ancienne version reste en cache. -->
-<link rel="stylesheet" href="styles.css?v=6">
+<title>ChristLab Team â€” Console d'administration</title>
+<!-- Le ?v= force le navigateur Ã  recharger les fichiers aprÃ¨s un dÃ©ploiement.
+     Ã€ incrÃ©menter Ã  chaque mise en ligne, sinon l'ancienne version reste en cache. -->
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 
-<!-- ÉCRAN DE CONNEXION -->
+<!-- Ã‰CRAN DE CONNEXION -->
 <div id="login" class="login-wrap">
   <form id="login-form" class="login-card">
     <div class="brand"><span class="b-christ">Christ</span><span class="b-lab">Lab</span> <span class="b-team">Team</span></div>
@@ -19,7 +19,7 @@
       <input id="email" type="email" autocomplete="username" required placeholder="admin@christlab.com">
     </label>
     <label>Mot de passe
-      <input id="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+      <input id="password" type="password" autocomplete="current-password" required placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
     </label>
     <button type="submit" id="login-btn">Se connecter</button>
     <div id="login-error" class="error" hidden></div>
@@ -33,18 +33,18 @@
     <nav id="nav"></nav>
     <div class="sidebar-foot">
       <span id="who"></span>
-      <button id="logout" class="link">Déconnexion</button>
+      <button id="logout" class="link">DÃ©connexion</button>
     </div>
   </aside>
   <main class="content">
     <header class="topbar">
       <h1 id="view-title">Tableau de bord</h1>
-      <button id="refresh" class="ghost">↻ Rafraîchir</button>
+      <button id="refresh" class="ghost">â†» RafraÃ®chir</button>
     </header>
     <section id="view" class="view"></section>
   </main>
 </div>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
