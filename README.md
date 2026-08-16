@@ -20,7 +20,15 @@ Tous les modules disposent désormais d'actions d'écriture : **Pistes** (créer
 **Factures pub** (créer / marquer payée), **Paiements** (calculer les versements / marquer payé),
 **Administrateurs** (créer / éditer), **Utilisateurs** (éditer / suspendre), **Règles métier** (éditer).
 
-Chaque tableau dispose d'un champ **Filtrer…** (recherche instantanée côté navigateur).
+S'y ajoutent **Impact Pépites** (écoutes des artistes émergents + octroi de dividendes)
+et **Dividendes** (historique).
+
+Chaque tableau dispose d'un champ **Filtrer…** (recherche instantanée) et d'une **pagination
+par 50 lignes**. Campagnes et Factures ont en plus des **filtres appliqués côté serveur**.
+
+> La pagination ne peut être que côté navigateur : aucun endpoint du backend n'accepte de
+> limite ni de décalage. Les listes sont donc chargées intégralement puis découpées à l'écran.
+> Une vraie pagination serveur demanderait une évolution du backend.
 
 ### Notes sur le catalogue (Pistes / Artistes)
 
@@ -106,8 +114,15 @@ Il faut se connecter avec un compte ayant un **rôle admin** (`SUPER_ADMIN` ou
 
 ## 5. Prochaines étapes
 
-- Pagination / filtres serveur sur les grandes listes (le filtre actuel est côté navigateur).
-- Garde-fou : masquer *Suspendre* sur sa propre ligne (se suspendre soi-même bloque la console).
+Ces points dépendent d'une **évolution du backend**, pas de la console :
+
+- **Téléversement** des fichiers audio et pochettes (aujourd'hui : on saisit une URL) — aucun
+  endpoint d'upload n'existe.
+- **Pagination serveur** sur les grandes listes — aucun endpoint n'accepte limite/décalage.
+- **Réinitialisation de mot de passe** — aucun endpoint ; une perte impose une manipulation
+  directe en base de données.
+- **Suppression d'un relevé de versement** — aucun endpoint ; un calcul lancé deux fois sur la
+  même période laisse des doublons définitifs (la console avertit avant, mais ne peut pas réparer).
 - Téléversement des fichiers audio et pochettes (aujourd'hui : on saisit une URL).
 - Gestion fine des rôles & permissions (SUPER_ADMIN vs DELEGATED_ADMIN).
 - Éventuel : servir le dashboard depuis le backend (même origine, zéro CORS).
