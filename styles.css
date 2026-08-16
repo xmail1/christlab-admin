@@ -120,6 +120,11 @@ tr:hover td{background:#FBFAF6}
 .modal-form label.chk{flex-direction:row;align-items:center;gap:8px}
 .modal-form label.chk input{width:auto}
 .field-label{font-weight:600;color:#374151;font-size:13px;margin-bottom:6px}
+.url-upload{display:flex;gap:8px;align-items:center}
+.url-upload input[type=url]{flex:1;min-width:0}
+.url-upload button{white-space:nowrap}
+.upload-info{display:block;margin-top:5px;font-size:12px;font-weight:400;color:var(--muted)}
+.upload-info.ok{color:#166534} .upload-info.ko{color:#991B1B}
 .multi{display:flex;flex-wrap:wrap;gap:6px 16px;border:1px solid var(--line);
   border-radius:10px;padding:10px 12px;background:#fff}
 .multi label.chk{font-weight:500;margin:0}

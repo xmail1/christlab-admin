@@ -36,8 +36,10 @@ const F = {
     { name: "continent", label: "Continent", type: "select", options: VOC.continent, required: true, placeholderOption: "— choisir —" },
     { name: "country", label: "Pays", type: "text", required: true },
     { name: "durationSec", label: "Durée (secondes)", type: "number", required: true },
-    { name: "audioUrl", label: "URL audio", type: "url", required: true, placeholder: "https://…" },
-    { name: "coverUrl", label: "URL pochette", type: "url", placeholder: "https://…" },
+    { name: "audioUrl", label: "Fichier audio", type: "urlUpload", required: true, placeholder: "https://… ou téléversez",
+      accept: "audio/*,.mp3,.m4a,.aac,.ogg,.opus,.wav" },
+    { name: "coverUrl", label: "Pochette", type: "urlUpload", placeholder: "https://… ou téléversez",
+      accept: "image/*,.jpg,.jpeg,.png,.webp" },
     { name: "heartStates", label: "États du cœur", type: "multi", options: VOC.heartStates },
     { name: "isPepite", label: "Pépite", type: "checkbox" },
     { name: "isPremiumOnly", label: "Réservé aux abonnés Premium", type: "checkbox" },
@@ -89,6 +91,10 @@ const F = {
     { name: "premiumStatus", label: "Abonnement", type: "select", options: ["ACTIVE", "TRIAL", "EXPIRED"], placeholderOption: "— inchangé —" },
     { name: "premiumEndDate", label: "Fin d'abonnement", type: "date" },
     { name: "isSuspended", label: "Suspendu", type: "checkbox" },
+  ],
+  // Réinitialisation par un SUPER_ADMIN — le backend n'a aucun parcours « mot de passe oublié ».
+  passwordReset: [
+    { name: "newPassword", label: "Nouveau mot de passe (8 caractères minimum)", type: "password", required: true },
   ],
   dividendGrant: [
     { name: "amount", label: "Montant (USD)", type: "text", required: true, placeholder: "ex. 25.00" },
@@ -209,6 +215,23 @@ async function api(path, opts = {}) {
   return data;
 }
 
+/* Téléversement d'un média : requête multipart, donc SANS le Content-Type JSON
+   qu'impose api(). Le navigateur pose lui-même la frontière multipart. */
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(BASE + "/api/admin/uploads", {
+    method: "POST",
+    headers: token ? { Authorization: "Bearer " + token } : {},
+    body: fd,
+  });
+  const text = await res.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+  if (res.status === 401) { doLogout(); throw new Error("Session expirée — reconnectez-vous."); }
+  if (!res.ok) throw new Error((data && data.error) || ("Échec du téléversement (" + res.status + ")"));
+  return data;
+}
+
 /* ---------------- Auth ---------------- */
 async function doLogin(email, password) {
   const data = await api("/api/auth/login", { method: "POST", isLogin: true, body: JSON.stringify({ email, password }) });
@@ -236,7 +259,36 @@ function openForm(title, fields, values = {}, opts = {}) {
       const v = values[f.name];
       const lab = el("label", null, f.label + (f.required ? " *" : ""));
       let input;
-      if (f.type === "textarea") { input = el("textarea"); input.rows = 3; }
+      // `field` est ce qu'on insère dans le DOM ; `input` reste l'élément porteur de la
+      // valeur. Les deux diffèrent quand le champ s'accompagne d'un bouton (téléversement).
+      let field = null;
+      if (f.type === "urlUpload") {
+        input = el("input"); input.type = "url";
+        const file = el("input"); file.type = "file"; file.hidden = true;
+        if (f.accept) file.accept = f.accept;
+        const btn = el("button", "ghost small", "Téléverser"); btn.type = "button";
+        const info = el("span", "upload-info");
+        btn.onclick = () => file.click();
+        file.onchange = async () => {
+          const chosen = file.files && file.files[0];
+          if (!chosen) return;
+          btn.disabled = true; info.textContent = "Envoi…"; info.className = "upload-info";
+          try {
+            const res = await uploadFile(chosen);
+            input.value = res.url;
+            info.textContent = `${chosen.name} — ${Math.round((res.sizeBytes || 0) / 1024)} Ko`;
+            info.className = "upload-info ok";
+          } catch (e) {
+            info.textContent = e.message; info.className = "upload-info ko";
+          } finally { btn.disabled = false; file.value = ""; }
+        };
+        field = el("div", "url-upload");
+        field.append(input, btn, file);
+        const holder = el("div");
+        holder.append(field, info);
+        field = holder;
+      }
+      else if (f.type === "textarea") { input = el("textarea"); input.rows = 3; }
       else if (f.type === "select") {
         input = el("select");
         if (f.placeholderOption) { const op = el("option", null, f.placeholderOption); op.value = ""; input.append(op); }
@@ -302,7 +354,7 @@ function openForm(title, fields, values = {}, opts = {}) {
         wrap.append(el("div", "field-label", f.label), input);
         form.append(wrap);
       }
-      else { lab.append(input); form.append(lab); }
+      else { lab.append(field || input); form.append(lab); }
     });
     const actions = el("div", "modal-actions");
     const cancel = el("button", "ghost", "Annuler"); cancel.type = "button";
@@ -568,8 +620,12 @@ function userActions(row) {
       { name: row.name, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
       `/api/admin/users/${id}`)),
   ];
-  // Garde-fou : se suspendre soi-même verrouille la console sans aucun recours applicatif
-  // (le backend n'a pas de réinitialisation) — il faudrait repasser par la base de données.
+  // Réservé au SUPER_ADMIN côté backend : un compte délégué recevra un refus explicite.
+  btns.push(iconBtn("Mot de passe", "", () => runEdit(
+    `Réinitialiser le mot de passe de ${row.name}`, F.passwordReset, {},
+    `/api/admin/users/${id}/password`, "PUT")));
+  // Garde-fou : se suspendre soi-même verrouille la console. Le mot de passe reste
+  // réinitialisable sur son propre compte, c'est justement le filet de sécurité.
   if (estMonCompte(row.email)) {
     btns.push(el("span", "muted", "— votre compte"));
     return btns;
@@ -695,12 +751,18 @@ function invoiceActions(row) {
 function payoutActions(row) {
   const id = row.id;
   const paid = row.isPaid === true;
-  return [iconBtn(paid ? "Annuler le paiement" : "Marquer payé", paid ? "danger" : "", async () => {
-    const label = `${row.artistName} — ${row.amountDue} ${row.currency || "USD"}`;
+  const label = `${row.artistName} — ${row.amountDue} ${row.currency || "USD"}`;
+  const btns = [iconBtn(paid ? "Annuler le paiement" : "Marquer payé", paid ? "danger" : "", async () => {
     if (!confirm(paid ? `Annuler le paiement de ${label} ?` : `Marquer ${label} comme payé ?`)) return;
     try { await api(`/api/admin/payouts/${id}/pay`, { method: "PUT", body: JSON.stringify({ isPaid: !paid }) }); loadView(current); }
     catch (e) { alert(e.message); }
   })];
+  // Réparation d'un calcul lancé deux fois. Le backend refuse de supprimer un relevé
+  // déjà payé : on n'efface pas la trace d'un versement réellement effectué.
+  if (!paid) {
+    btns.push(iconBtn("Supprimer", "danger", () => runDelete(`/api/admin/payouts/${id}`, `le relevé de ${label}`)));
+  }
+  return btns;
 }
 
 function businessRuleActions(row) {
