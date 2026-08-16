@@ -168,13 +168,19 @@ const VIEWS = [
   { id: "advertisers",    title: "Annonceurs",       ico: "🏢", ep: "/api/admin/ads/advertisers", rowActions: advertiserActions,
       create: { fields: F.advertiser, ep: "/api/admin/ads/advertisers", method: "POST", label: "Nouvel annonceur" } },
   { id: "campaigns",      title: "Campagnes",        ico: "📣", ep: "/api/admin/ads/campaigns", rowActions: campaignActions,
+      filters: [{ name: "status", label: "Statut", options: ["PLANIFIEE", "ACTIVE", "TERMINEE"] },
+                { name: "placement", label: "Emplacement", options: ["PAGE_GEMS"] }],
       create: { fields: F.campaign, ep: "/api/admin/ads/campaigns", method: "POST", label: "Nouvelle campagne" } },
   { id: "invoices",       title: "Factures pub",     ico: "🧾", ep: "/api/admin/ads/invoices", rowActions: invoiceActions,
+      filters: [{ name: "status", label: "Statut", options: ["IMPAYEE", "PAYEE"] }],
       create: { fields: F.invoice, ep: "/api/admin/ads/invoices", method: "POST", label: "Nouvelle facture" } },
   { id: "payouts",        title: "Paiements",        ico: "💰", ep: "/api/admin/payouts", rowActions: payoutActions,
       create: { fields: F.payoutCalc, ep: "/api/admin/payouts/calculate", method: "POST", label: "Calculer les versements", icon: "🧮", guard: guardPayoutPeriod } },
   { id: "dividends",      title: "Dividendes",       ico: "📈", ep: "/api/admin/dividends" },
-  { id: "settings",       title: "Réglages",         ico: "⚙️", ep: "/api/admin/settings" },
+  // Impact des artistes émergents : c'est ce qui justifie les dividendes accordés.
+  { id: "emerging",       title: "Impact Pépites",   ico: "🌱", ep: "/api/admin/emerging-impact", rowActions: emergingActions },
+  // NB : /api/admin/settings n'expose qu'un seul taux, déjà présent et ÉDITABLE dans
+  // « Règles métier ». Le module faisait doublon en lecture seule, il a été retiré.
   { id: "business-rules", title: "Règles métier",    ico: "📐", ep: "/api/admin/business-rules", rowActions: businessRuleActions },
   { id: "audit-logs",     title: "Journal d'audit",  ico: "📜", ep: "/api/admin/audit-logs" },
 ];
@@ -214,6 +220,7 @@ async function doLogin(email, password) {
 }
 function doLogout() {
   token = ""; ARTISTS = null; Object.keys(REFS).forEach(k => delete REFS[k]); localStorage.removeItem(TOKEN_KEY);
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   $("#app").hidden = true; $("#login").hidden = false;
 }
 
@@ -452,6 +459,10 @@ function renderStats(obj) {
   }
   return wrap.children.length ? wrap : el("div", "empty", "Aucune donnée.");
 }
+/* Nombre de lignes affichées d'un coup. La pagination est forcément côté navigateur :
+   aucun endpoint du backend n'accepte de limite ni de décalage. */
+const PAGE_SIZE = 50;
+
 function renderTable(rows, rowActions, columns) {
   if (!rows.length) return el("div", "empty", "Aucun élément.");
   const all = [...rows.reduce((s, r) => { Object.keys(r).forEach(k => s.add(k)); return s; }, new Set())];
@@ -485,17 +496,35 @@ function renderTable(rows, rowActions, columns) {
     tr.dataset.search = cols.map(c => fmt(r[c])).join(" ").toLowerCase();
     tb.append(tr);
   });
-  filter.oninput = () => {
-    const q = filter.value.trim().toLowerCase();
-    let shown = 0;
-    [...tb.children].forEach(tr => {
-      const ok = !q || tr.dataset.search.includes(q);
-      tr.hidden = !ok; if (ok) shown++;
-    });
-    count.textContent = q ? `${shown} / ${rows.length} élément(s)` : `${rows.length} élément(s)`;
-  };
+  // Filtre et pagination partagent le même état : filtrer remet à la première page.
+  const trs = [...tb.children];
+  let page = 0, q = "";
+  const pager = el("div", "pager");
+  const prev = el("button", "ghost small", "‹ Précédent");
+  const next = el("button", "ghost small", "Suivant ›");
+  const pageInfo = el("span", "muted");
+  pager.append(prev, pageInfo, next);
+
+  function apply() {
+    const match = q ? trs.filter(tr => tr.dataset.search.includes(q)) : trs;
+    const pages = Math.max(1, Math.ceil(match.length / PAGE_SIZE));
+    if (page >= pages) page = pages - 1;
+    if (page < 0) page = 0;
+    trs.forEach(tr => { tr.hidden = true; });
+    match.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).forEach(tr => { tr.hidden = false; });
+    count.textContent = q ? `${match.length} / ${rows.length} élément(s)` : `${rows.length} élément(s)`;
+    pager.hidden = match.length <= PAGE_SIZE;
+    pageInfo.textContent = `Page ${page + 1} sur ${pages}`;
+    prev.disabled = page === 0;
+    next.disabled = page >= pages - 1;
+  }
+  filter.oninput = () => { q = filter.value.trim().toLowerCase(); page = 0; apply(); };
+  prev.onclick = () => { page--; apply(); };
+  next.onclick = () => { page++; apply(); };
+  apply();
+
   table.append(tb); scroll.append(table);
-  card.append(head, scroll);
+  card.append(head, scroll, pager);
   return card;
 }
 const SECTION_LABELS = {
@@ -534,17 +563,32 @@ function iconBtn(label, cls, onClick) { const b = el("button", "rowbtn " + (cls 
 function userActions(row) {
   const id = row.id ?? row.userId;
   const suspended = String(row.status || "").toUpperCase() === "SUSPENDED" || row.isSuspended === true;
-  return [
+  const btns = [
     iconBtn("Éditer", "", () => runEdit("Éditer l'utilisateur", F.userEdit,
       { name: row.name, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
       `/api/admin/users/${id}`)),
-    // Le backend inverse lui-même le statut : cette route ne lit aucun corps de requête.
-    iconBtn(suspended ? "Réactiver" : "Suspendre", suspended ? "" : "danger", async () => {
-      if (!confirm(`${suspended ? "Réactiver" : "Suspendre"} le compte de ${row.name} (${row.email}) ?`)) return;
-      try { await api(`/api/admin/users/${id}/suspend`, { method: "PUT" }); loadView(current); }
-      catch (e) { alert(e.message); }
-    }),
   ];
+  // Garde-fou : se suspendre soi-même verrouille la console sans aucun recours applicatif
+  // (le backend n'a pas de réinitialisation) — il faudrait repasser par la base de données.
+  if (estMonCompte(row.email)) {
+    btns.push(el("span", "muted", "— votre compte"));
+    return btns;
+  }
+  // Le backend inverse lui-même le statut : cette route ne lit aucun corps de requête.
+  btns.push(iconBtn(suspended ? "Réactiver" : "Suspendre", suspended ? "" : "danger", async () => {
+    if (!confirm(`${suspended ? "Réactiver" : "Suspendre"} le compte de ${row.name} (${row.email}) ?`)) return;
+    try { await api(`/api/admin/users/${id}/suspend`, { method: "PUT" }); loadView(current); }
+    catch (e) { alert(e.message); }
+  }));
+  return btns;
+}
+function estMonCompte(email) {
+  const moi = (localStorage.getItem(EMAIL_KEY) || "").trim().toLowerCase();
+  return !!moi && String(email || "").trim().toLowerCase() === moi;
+}
+function emergingActions(row) {
+  return [iconBtn("Dividende", "", () => runEdit(`Accorder un dividende à ${row.artistName}`,
+    F.dividendGrant, {}, `/api/admin/dividends/artist/${row.artistId}`, "POST"))];
 }
 function adminActions(row) {
   const id = row.id;
@@ -675,26 +719,69 @@ function buildNav() {
     nav.append(b);
   });
 }
+/* Filtres appliqués CÔTÉ SERVEUR (le backend les accepte en paramètres d'URL),
+   contrairement au champ « Filtrer… » du tableau qui ne trie que ce qui est déjà chargé. */
+const FILTER_STATE = {};
+
 async function loadView(id) {
   current = id;
   const view = VIEWS.find(v => v.id === id);
   $("#view-title").textContent = view.title;
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.id === id));
   const host = $("#view"); host.innerHTML = "";
-  if (view.create) {
+
+  if (view.create || view.filters) {
     const bar = el("div", "toolbar");
-    const add = el("button", "btn small", (view.create.icon || "＋") + " " + view.create.label);
-    add.onclick = () => runCreate(view);
-    bar.append(add); host.append(bar);
+    if (view.filters) {
+      const grp = el("div", "filters");
+      view.filters.forEach(f => {
+        const wrap = el("label", "filter-field", f.label);
+        const sel = el("select");
+        const any = el("option", null, "Tous"); any.value = ""; sel.append(any);
+        f.options.forEach(o => { const op = el("option", null, o); op.value = o; sel.append(op); });
+        sel.value = (FILTER_STATE[id] && FILTER_STATE[id][f.name]) || "";
+        sel.onchange = () => {
+          FILTER_STATE[id] = { ...(FILTER_STATE[id] || {}), [f.name]: sel.value };
+          loadView(id);
+        };
+        wrap.append(sel); grp.append(wrap);
+      });
+      bar.append(grp);
+    }
+    if (view.create) {
+      const add = el("button", "btn small", (view.create.icon || "＋") + " " + view.create.label);
+      add.onclick = () => runCreate(view);
+      bar.append(add);
+    }
+    host.append(bar);
   }
+
   const holder = el("div"); host.append(holder);
   holder.append(el("div", "loading", "Chargement…"));
   try {
-    const data = await api(view.ep);
+    const data = await api(withFilters(view.ep, FILTER_STATE[id]));
     holder.innerHTML = ""; holder.append(smartRender(data, view));
   } catch (e) {
     holder.innerHTML = ""; holder.append(el("div", "err-inline", e.message));
   }
+}
+function withFilters(ep, state) {
+  const qs = Object.entries(state || {}).filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`);
+  if (!qs.length) return ep;
+  return ep + (ep.includes("?") ? "&" : "?") + qs.join("&");
+}
+
+/* ---------------- Session ---------------- */
+/* Le jeton a une durée de vie limitée : on le renouvelle en tâche de fond plutôt que
+   d'éjecter l'administrateur en pleine saisie. Un échec laisse le 401 faire son travail. */
+let refreshTimer = null;
+async function refreshSession() {
+  if (!token) return;
+  try {
+    const d = await api("/api/auth/refresh", { method: "POST" });
+    if (d && d.token) { token = d.token; localStorage.setItem(TOKEN_KEY, token); }
+  } catch { /* jeton expiré : api() a déjà déconnecté */ }
 }
 
 /* ---------------- Boot ---------------- */
@@ -702,6 +789,8 @@ function showApp() {
   $("#login").hidden = true; $("#app").hidden = false;
   $("#who").textContent = localStorage.getItem(EMAIL_KEY) || "";
   buildNav(); loadView("dashboard");
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refreshSession, 25 * 60 * 1000);
 }
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
