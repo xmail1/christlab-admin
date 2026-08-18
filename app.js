@@ -316,6 +316,7 @@ function openForm(title, fields, values = {}, opts = {}) {
             input.value = res.url;
             info.textContent = `${chosen.name || "fichier"} — ${Math.round((res.sizeBytes || 0) / 1024)} Ko`;
             info.className = "upload-info ok";
+            input.dispatchEvent(new Event("input"));
           } catch (e) {
             info.textContent = messageReseau(e); info.className = "upload-info ko";
           } finally { btn.disabled = false; file.value = ""; }
@@ -326,7 +327,18 @@ function openForm(title, fields, values = {}, opts = {}) {
         field = el("div", "url-upload");
         field.append(input, btn, file);
         const holder = el("div");
-        holder.append(field, info);
+        // Aperçu immédiat : on voit ce qu'on enregistre, plutôt qu'une adresse opaque.
+        const apercu = el("img", "apercu"); apercu.hidden = true; apercu.alt = "";
+        const majApercu = () => {
+          const v = input.value.trim();
+          if (estUrlImage(v)) { apercu.src = v; apercu.hidden = false; }
+          else { apercu.hidden = true; apercu.removeAttribute("src"); }
+        };
+        apercu.onerror = () => { apercu.hidden = true; };
+        input.addEventListener("input", majApercu);
+        input.addEventListener("change", majApercu);
+        holder.append(field, info, apercu);
+        setTimeout(majApercu, 0);
 
         // Glisser-déposer sur la zone du champ.
         ["dragenter", "dragover"].forEach(ev => holder.addEventListener(ev, e => {
@@ -536,6 +548,10 @@ function fmt(v) {
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }
+/* Reconnait une adresse d'image affichable (pochettes, visuels de campagne). */
+function estUrlImage(v) {
+  return typeof v === "string" && /^https?:\/\//.test(v) && /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/i.test(v);
+}
 function statusBadge(v) {
   const s = String(v).toUpperCase();
   const map = {
@@ -595,6 +611,13 @@ function renderTable(rows, rowActions, columns) {
     cols.forEach(c => {
       const td = el("td"); const key = c.toLowerCase();
       if (r[c] != null && (key.includes("status") || key.includes("role") || key === "visibility")) td.append(statusBadge(r[c]));
+      // Une adresse d'image vaut mieux vue que lue : vignette cliquable.
+      else if (estUrlImage(r[c])) {
+        const a = el("a"); a.href = r[c]; a.target = "_blank"; a.rel = "noopener";
+        const img = el("img", "thumb"); img.src = r[c]; img.alt = ""; img.loading = "lazy";
+        img.onerror = () => { a.replaceChildren(document.createTextNode("image introuvable")); a.className = "muted"; };
+        a.append(img); td.append(a);
+      }
       else {
         const txt = fmt(r[c]);
         td.textContent = txt.length > 120 ? txt.slice(0, 120) + "…" : txt;
