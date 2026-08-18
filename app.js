@@ -9,6 +9,11 @@ const TOKEN_KEY = "cl_admin_token";
 const EMAIL_KEY = "cl_admin_email";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 
+/* Version du fichier, lue sur la balise <script src="app.js?v=N">. Affichée dans la
+   barre latérale : sans cela, impossible de savoir si le navigateur sert une version
+   périmée — ce doute a coûté plusieurs allers-retours. */
+const VERSION = ((document.currentScript && document.currentScript.src || "").match(/[?&]v=(\d+)/) || [])[1] || "?";
+
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
@@ -931,6 +936,7 @@ async function refreshSession() {
 function showApp() {
   $("#login").hidden = true; $("#app").hidden = false;
   $("#who").textContent = localStorage.getItem(EMAIL_KEY) || "";
+  const v = $("#version"); if (v) v.textContent = "v" + VERSION;
   buildNav(); loadView("dashboard");
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(refreshSession, 25 * 60 * 1000);
