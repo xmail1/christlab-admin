@@ -144,3 +144,5 @@ tr:hover td{background:#FBFAF6}
   border-radius:10px;border:1px solid var(--line);object-fit:cover}
 
 .version{font-size:11px;opacity:.55;letter-spacing:.3px}
+
+.hint-suggestion{display:block;margin-top:5px;font-size:12px;font-weight:400;color:#92400E;background:#FEF3C7;padding:5px 9px;border-radius:7px}

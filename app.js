@@ -96,8 +96,16 @@ const F = {
     // Le role commande l acces a l espace Artiste de l application.
     // Accorder ADMIN est reserve au SUPER_ADMIN : le serveur refuse sinon, explicitement.
     { name: "role", label: "Rôle du compte", type: "select", options: ["USER", "ARTIST", "ADMIN"], placeholderOption: "— inchangé —" },
-    // Seul ce rattachement ouvre l acces aux revenus d un artiste : le nom ne compte plus.
-    { name: "artistId", label: "Fiche artiste rattachée (rôle ARTISTE)", type: "picker", source: "artistes" },
+    // Seul ce rattachement ouvre l'accès aux revenus d'un artiste : le nom ne compte plus.
+    // La fiche est PROPOSÉE d'après le nom du compte, jamais imposée : c'est précisément
+    // le rapprochement automatique par le nom qui constituait la faille côté serveur.
+    { name: "artistId", label: "Fiche artiste rattachée (rôle ARTISTE)", type: "picker", source: "artistes",
+      suggestion: (valeurs, liste) => {
+        const nom = String(valeurs.name || "").trim().toLowerCase();
+        if (!nom) return null;
+        const trouvee = liste.find(a => String(a.name || "").trim().toLowerCase() === nom);
+        return trouvee ? trouvee.id : null;
+      } },
     { name: "premiumStatus", label: "Abonnement", type: "select", options: ["ACTIVE", "TRIAL", "EXPIRED"], placeholderOption: "— inchangé —" },
     { name: "premiumEndDate", label: "Fin d'abonnement", type: "date" },
     { name: "isSuspended", label: "Suspendu", type: "checkbox" },
@@ -303,7 +311,8 @@ function openForm(title, fields, values = {}, opts = {}) {
     const form = el("form", "modal-form");
     const inputs = {};
     fields.forEach(f => {
-      const v = values[f.name];
+      let v = values[f.name];
+      let suggere = false;
       const lab = el("label", null, f.label + (f.required ? " *" : ""));
       let input;
       // `field` est ce qu'on insère dans le DOM ; `input` reste l'élément porteur de la
@@ -396,6 +405,11 @@ function openForm(title, fields, values = {}, opts = {}) {
         const none = el("option", null, "— choisir —"); none.value = ""; input.append(none);
         const src = REF_SOURCES[f.source] || {};
         const list = REFS[f.source] || [];
+        // Rien de rattaché encore : on propose la fiche qui correspond, à confirmer.
+        if ((v == null || v === "") && typeof f.suggestion === "function") {
+          const propose = f.suggestion(values, list);
+          if (propose != null) { v = propose; suggere = true; }
+        }
         list.forEach(r => {
           const op = el("option", null, src.label ? src.label(r) : String(r.id));
           op.value = String(r.id); input.append(op);
@@ -434,7 +448,14 @@ function openForm(title, fields, values = {}, opts = {}) {
         wrap.append(el("div", "field-label", f.label), input);
         form.append(wrap);
       }
-      else { lab.append(field || input); form.append(lab); }
+      else {
+        lab.append(field || input);
+        if (suggere) {
+          lab.append(el("span", "hint-suggestion",
+            "Proposé d'après le nom du compte — vérifiez avant d'enregistrer."));
+        }
+        form.append(lab);
+      }
     });
     const actions = el("div", "modal-actions");
     const cancel = el("button", "ghost", "Annuler"); cancel.type = "button";
