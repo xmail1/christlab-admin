@@ -93,6 +93,9 @@ const F = {
   // UserUpdateRequest expose aussi l'abonnement : indispensable pour offrir ou prolonger un accès.
   userEdit: [
     { name: "name", label: "Nom", type: "text" },
+    // Le role commande l acces a l espace Artiste de l application.
+    // Accorder ADMIN est reserve au SUPER_ADMIN : le serveur refuse sinon, explicitement.
+    { name: "role", label: "Rôle du compte", type: "select", options: ["USER", "ARTIST", "ADMIN"], placeholderOption: "— inchangé —" },
     { name: "premiumStatus", label: "Abonnement", type: "select", options: ["ACTIVE", "TRIAL", "EXPIRED"], placeholderOption: "— inchangé —" },
     { name: "premiumEndDate", label: "Fin d'abonnement", type: "date" },
     { name: "isSuspended", label: "Suspendu", type: "checkbox" },
@@ -703,7 +706,7 @@ function userActions(row) {
   const suspended = String(row.status || "").toUpperCase() === "SUSPENDED" || row.isSuspended === true;
   const btns = [
     iconBtn("Éditer", "", () => runEdit("Éditer l'utilisateur", F.userEdit,
-      { name: row.name, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
+      { name: row.name, role: row.role, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
       `/api/admin/users/${id}`)),
   ];
   // Réservé au SUPER_ADMIN côté backend : un compte délégué recevra un refus explicite.
