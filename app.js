@@ -96,6 +96,8 @@ const F = {
     // Le role commande l acces a l espace Artiste de l application.
     // Accorder ADMIN est reserve au SUPER_ADMIN : le serveur refuse sinon, explicitement.
     { name: "role", label: "Rôle du compte", type: "select", options: ["USER", "ARTIST", "ADMIN"], placeholderOption: "— inchangé —" },
+    // Seul ce rattachement ouvre l acces aux revenus d un artiste : le nom ne compte plus.
+    { name: "artistId", label: "Fiche artiste rattachée (rôle ARTISTE)", type: "picker", source: "artistes" },
     { name: "premiumStatus", label: "Abonnement", type: "select", options: ["ACTIVE", "TRIAL", "EXPIRED"], placeholderOption: "— inchangé —" },
     { name: "premiumEndDate", label: "Fin d'abonnement", type: "date" },
     { name: "isSuspended", label: "Suspendu", type: "checkbox" },
@@ -488,6 +490,7 @@ async function ensureArtists(force = false) {
 const REF_SOURCES = {
   advertisers: { ep: "/api/admin/ads/advertisers", label: r => r.name },
   campaigns: { ep: "/api/admin/ads/campaigns", label: r => `#${r.id} — ${r.placement} — ${r.advertiserName || ""}`.trim() },
+  artistes: { ep: "/api/admin/artists", label: r => r.name },
 };
 const REFS = {};
 async function ensureRef(source, force = false) {
@@ -706,7 +709,7 @@ function userActions(row) {
   const suspended = String(row.status || "").toUpperCase() === "SUSPENDED" || row.isSuspended === true;
   const btns = [
     iconBtn("Éditer", "", () => runEdit("Éditer l'utilisateur", F.userEdit,
-      { name: row.name, role: row.role, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
+      { name: row.name, role: row.role, artistId: row.artistId, isSuspended: suspended, premiumStatus: row.premiumStatus, premiumEndDate: row.premiumEndDate },
       `/api/admin/users/${id}`)),
   ];
   // Réservé au SUPER_ADMIN côté backend : un compte délégué recevra un refus explicite.
